@@ -10,7 +10,7 @@ This project is designed to address the problem of needing to scan documents wit
 
 2. clone this project and install dependencies.
 
-        git clone
+        git clone https://github.com/worapon-st/document-scanner
         uv sync
 
 3. run the program
