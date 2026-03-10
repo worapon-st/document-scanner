@@ -21,8 +21,8 @@ This project is designed to address the problem of needing to scan documents wit
 
 1. Automation scanned mode.
 
-img/assets/doc_scanner_auto.png
+![image](img/assets/doc_scanner_auto.png)
 
 2. Edge selection scanned mode.
 
-img/assets/doc_scanner_edge_select.png
+![image](img/assets/doc_scanner_edge_select.png)
