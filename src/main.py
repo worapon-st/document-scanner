@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image, ImageTk
 from typing import Optional
 import os
-import docScanner
+from docscan import core
 
 # ─── Color Palette ────────────────────────────────────────────────────────────
 BG        = "#0f0f0f"
@@ -219,9 +219,9 @@ class App(tk.Tk):
         tk.Label(topbar, text="document scanner", bg=PANEL, fg=SUBTEXT,
                  font=("Courier New", 9)).pack(side="left", pady=14)
 
-        self.btn_export = self._topbtn(topbar, "EXPORT", self._export, side="right", padx=(0, 20))
-        self.btn_scan   = self._topbtn(topbar, "SCAN",   self._scan,   side="right")
-        self.btn_import = self._topbtn(topbar, "IMPORT", self._import, side="right")
+        self._topbtn(topbar, "EXPORT", self._export, side="right", padx=(0, 20))
+        self._topbtn(topbar, "SCAN",   self._scan,   side="right")
+        self._topbtn(topbar, "IMPORT", self._import, side="right")
 
         # Body
         body = tk.Frame(self, bg=BG)
@@ -245,7 +245,7 @@ class App(tk.Tk):
         cmd,
         side: str = "left",
         padx: tuple[int, int] = (0, 0),
-    ) -> tk.Button:
+    ) -> None:
         btn = tk.Button(
             parent, text=text, command=cmd,
             bg=CARD, fg=TEXT, activebackground=ACCENT, activeforeground=BG,
@@ -255,7 +255,6 @@ class App(tk.Tk):
         btn.pack(side=side, pady=10, padx=padx)
         btn.bind("<Enter>", lambda e: btn.config(bg=ACCENT, fg=BG))
         btn.bind("<Leave>", lambda e: btn.config(bg=CARD,   fg=TEXT))
-        return btn
 
     def _build_controls(self, parent: tk.Widget) -> None:
         # ── Scan mode ────────────────────────────────────────────────────────
@@ -568,7 +567,7 @@ class App(tk.Tk):
         """
         Convert 4 corner handle canvas coords → (4, 1, 2) int32 ndarray
         in image-pixel space, matching the OpenCV contour format expected by
-        DocScanner.transform_perspective().
+        core.warp().
         """
         pts: list[list[list[int]]] = []
         for c in self._corners:
@@ -603,45 +602,13 @@ class App(tk.Tk):
         if self.scanned_cv is None:
             return
 
-        img: np.ndarray = self.scanned_cv.copy().astype(np.float32)
-
-        # Brightness: -100…100 → pixel offset ±255
-        b: int = self.sl_brightness.get()
-        if b != 0:
-            img = np.clip(img + b * 2.55, 0, 255)
-
-        # Contrast: 0…100 — scales pixel values around the midpoint (128).
-        # 0 = no change; 100 ≈ doubles contrast.
-        c: int = self.sl_contrast.get()
-        if c > 0:
-            factor: float = 1.0 + c / 100.0
-            img = np.clip((img - 128.0) * factor + 128.0, 0, 255)
-
-        # Saturation: -100…100 — scale the HSV S channel.
-        # +100 doubles saturation; -100 removes colour entirely.
-        sat_val: int = self.sl_saturation.get()
-        if sat_val != 0:
-            hsv: np.ndarray   = cv2.cvtColor(
-                img.astype(np.uint8), cv2.COLOR_BGR2HSV
-            ).astype(np.float32)
-            sat_factor: float = 1.0 + sat_val / 100.0
-            hsv[:, :, 1]      = np.clip(hsv[:, :, 1] * sat_factor, 0, 255)
-            img = cv2.cvtColor(
-                hsv.astype(np.uint8), cv2.COLOR_HSV2BGR
-            ).astype(np.float32)
-
-        # Sharpness: 0…100 — unsharp mask with adaptive Gaussian kernel.
-        s: int = self.sl_sharpness.get()
-        if s > 0:
-            uint: np.ndarray    = img.astype(np.uint8)
-            k: int              = max(1, int(s / 10) * 2 + 1)   # must be odd
-            blurred: np.ndarray = cv2.GaussianBlur(uint, (k, k), 0)
-            strength: float     = s / 40.0
-            img = cv2.addWeighted(
-                uint, 1.0 + strength, blurred, -strength, 0
-            ).astype(np.float32)
-
-        self.processed_cv = np.clip(img, 0, 255).astype(np.uint8)
+        self.processed_cv = core.adjust(
+            self.scanned_cv,
+            brightness=self.sl_brightness.get(),
+            contrast=self.sl_contrast.get(),
+            saturation=self.sl_saturation.get(),
+            sharpness=self.sl_sharpness.get(),
+        )
         self._show_result()
 
     def _reset_sliders(self) -> None:
@@ -665,7 +632,7 @@ class App(tk.Tk):
         if not path:
             return
 
-        img: Optional[np.ndarray] = cv2.imread(path)
+        img: Optional[np.ndarray] = core.load_image(path)
         if img is None:
             messagebox.showerror("Error", "Could not read image.")
             return
@@ -694,15 +661,11 @@ class App(tk.Tk):
             self._scan_auto()
 
     def _scan_auto(self) -> None:
-        """Detect document contour automatically using DocScanner and warp."""
-        scanner: docScanner.DocScanner               = docScanner.DocScanner(self.original_cv)
-        edge: np.ndarray                  = scanner.preprocess_image()
-        contours: list                    = scanner.find_contour(edge)
-        doc_contour: Optional[np.ndarray] = scanner.get_document_contour(contours)
+        """Detect document contour automatically and warp."""
+        doc_contour: Optional[np.ndarray] = core.find_document(self.original_cv)
 
         if doc_contour is not None:
-            self.scanned_cv   = scanner.transform_perspective(doc_contour)
-            self.processed_cv = self.scanned_cv.copy()
+            self.scanned_cv = core.warp(self.original_cv, doc_contour)
             self._apply_adjustments()
             self.status_var.set("Auto: document detected & scanned.")
         else:
@@ -718,11 +681,7 @@ class App(tk.Tk):
             messagebox.showwarning("Selective Mode", "4 corner handles are required.")
             return
 
-        contour: np.ndarray = self._corners_to_contour()
-        scanner: docScanner.DocScanner = docScanner.DocScanner(self.original_cv)
-
-        self.scanned_cv   = scanner.transform_perspective(contour)
-        self.processed_cv = self.scanned_cv.copy()
+        self.scanned_cv = core.warp(self.original_cv, self._corners_to_contour())
         self._apply_adjustments()
         self.status_var.set("Selective: scanned with manual corners.")
 
@@ -739,7 +698,7 @@ class App(tk.Tk):
         if not path:
             return
 
-        ok: bool = cv2.imwrite(path, self.processed_cv)
+        ok: bool = core.save_image(path, self.processed_cv)
         if ok:
             self.status_var.set(f"Exported: {os.path.basename(path)}")
             messagebox.showinfo("Exported", f"Saved to:\n{path}")
