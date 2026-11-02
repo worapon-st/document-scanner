@@ -27,9 +27,9 @@ class App(tk.Tk):
         self.minsize(900, 600)
         self.resizable(True, True)
 
-        self.original_cv:  Optional[np.ndarray] = None
-        self.scanned_cv:   Optional[np.ndarray] = None
-        self.processed_cv: Optional[np.ndarray] = None
+        self.original_cv: Optional[np.ndarray] = None
+        self.scanned_cv:  Optional[np.ndarray] = None
+        self._preview_cv: Optional[np.ndarray] = None   # scanned_cv at display size
 
         # Crop corners in original-image pixels, ordered TL, TR, BR, BL
         self._quad:           Optional[np.ndarray] = None
@@ -192,7 +192,7 @@ class App(tk.Tk):
         """Redraw both canvases once the window is stable after resizing."""
         self._resize_after_id = None
         self._show_original()
-        self._show_result()
+        self._update_preview()
 
     # ── Display helpers ────────────────────────────────────────────────────────
     def _render_image(
@@ -237,9 +237,18 @@ class App(tk.Tk):
         self._display_offset = offset
         self._draw_corners()
 
-    def _show_result(self) -> None:
-        if self.processed_cv is not None:
-            self._render_image(self.processed_cv, self.canvas_result)
+    def _update_preview(self) -> None:
+        """Shrink the scan to the result canvas so slider moves stay fast."""
+        if self.scanned_cv is None:
+            return
+        h, w    = self.scanned_cv.shape[:2]
+        s: float = min(1.0,
+                       max(self.canvas_result.winfo_width(),  2) / w,
+                       max(self.canvas_result.winfo_height(), 2) / h)
+        self._preview_cv = cv2.resize(self.scanned_cv,
+                                      (max(1, int(w * s)), max(1, int(h * s))),
+                                      interpolation=cv2.INTER_AREA)
+        self._apply_adjustments()
 
     # ── Coordinate conversion ──────────────────────────────────────────────────
     def _img_to_canvas(self, ix: float, iy: float) -> tuple[float, float]:
@@ -310,18 +319,20 @@ class App(tk.Tk):
         self._scan()
 
     # ── Adjustments ────────────────────────────────────────────────────────────
-    def _apply_adjustments(self) -> None:
-        if self.scanned_cv is None:
-            return
-
-        self.processed_cv = core.adjust(
-            self.scanned_cv,
+    def _adjusted(self, image: np.ndarray) -> np.ndarray:
+        return core.adjust(
+            image,
             brightness=self.sl_brightness.get(),
             contrast=self.sl_contrast.get(),
             saturation=self.sl_saturation.get(),
             sharpness=self.sl_sharpness.get(),
         )
-        self._show_result()
+
+    def _apply_adjustments(self) -> None:
+        # shortcut: the sharpness blur is sized in pixels, so it looks a little
+        # stronger on this small preview than on the full-size export.
+        if self._preview_cv is not None:
+            self._render_image(self._adjusted(self._preview_cv), self.canvas_result)
 
     def _reset_sliders(self) -> None:
         self.sl_brightness.set(0)
@@ -349,6 +360,7 @@ class App(tk.Tk):
 
         self.original_cv = img
         self.scanned_cv  = None
+        self._preview_cv = None
 
         contour: Optional[np.ndarray] = core.find_document(img)
         self._quad = self._default_quad() if contour is None else core.order_corners(contour)
@@ -372,11 +384,11 @@ class App(tk.Tk):
         self._quad = core.order_corners(self._quad)
         self._draw_corners()
         self.scanned_cv = core.warp(self.original_cv, self._quad)
-        self._apply_adjustments()
+        self._update_preview()
         self.status_var.set("Scan updated.")
 
     def _export(self) -> None:
-        if self.processed_cv is None:
+        if self.scanned_cv is None:
             messagebox.showwarning("Nothing to Export", "Import an image first.")
             return
 
@@ -388,7 +400,7 @@ class App(tk.Tk):
         if not path:
             return
 
-        ok: bool = core.save_image(path, self.processed_cv)
+        ok: bool = core.save_image(path, self._adjusted(self.scanned_cv))
         if ok:
             self.status_var.set(f"Exported: {os.path.basename(path)}")
             messagebox.showinfo("Exported", f"Saved to:\n{path}")
