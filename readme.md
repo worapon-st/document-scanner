@@ -17,6 +17,32 @@ This project is designed to address the problem of needing to scan documents wit
 
         uv run main.py
 
+## How It Works
+
+Image functions live in `src/docscan/core.py`. The window lives in `src/main.py`.
+
+```mermaid
+flowchart TD
+    import["IMPORT: load_image"] --> readable{"Image readable?"}
+    readable -- No --> error["Show error"]
+    readable -- Yes --> show["Show original and reset sliders"]
+    show --> mode{"Scan mode"}
+
+    mode -- AUTO --> detect["SCAN: find_document"]
+    detect --> found{"4-sided shape found?"}
+    found -- Yes --> warp["warp: flatten the page"]
+    found -- No --> fallback["Use the original image"]
+
+    mode -- SELECTIVE --> corners["Drag 4 corners, then SCAN"]
+    corners --> warp
+
+    warp --> adjust["adjust: apply sliders"]
+    adjust --> result["Show result"]
+    fallback --> result
+    result -- Move a slider --> adjust
+    result -- EXPORT --> save["save_image"]
+```
+
 ## Example
 
 1. Automation scanned mode.
