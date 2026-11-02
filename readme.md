@@ -15,7 +15,26 @@ This project is designed to address the problem of needing to scan documents wit
 
 3. run the program
 
-        uv run main.py
+        uv run src/main.py
+
+## Build the App (Windows)
+
+Build one file that runs without Python:
+
+        uv run pyinstaller --noconfirm --clean --onefile --windowed --name DocScan --paths src --specpath build src/main.py
+
+The app is saved to `dist/DocScan.exe`. It takes a few seconds to open.
+
+## Usage
+
+1. Open `DocScan.exe`, or run the program from source.
+2. Press IMPORT and choose a photo of a document.
+3. Choose a scan mode:
+   - AUTO finds the page for you.
+   - SELECTIVE lets you drag the 4 white corners onto the page.
+4. Press SCAN.
+5. Move the sliders to adjust the result.
+6. Press EXPORT and save as PNG or JPEG.
 
 ## How It Works
 
