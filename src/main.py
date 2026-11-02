@@ -207,6 +207,11 @@ class App(tk.Tk):
         # Single Configure binding on the root window (not individual widgets)
         self.bind("<Configure>", self._on_window_configure)
 
+    def report_callback_exception(self, exc, val, tb) -> None:
+        """Show callback errors on screen — the built app has no console."""
+        super().report_callback_exception(exc, val, tb)
+        messagebox.showerror("Error", str(val))
+
     # ── UI Construction ────────────────────────────────────────────────────────
     def _build_ui(self) -> None:
         # Top bar
@@ -681,7 +686,15 @@ class App(tk.Tk):
             messagebox.showwarning("Selective Mode", "4 corner handles are required.")
             return
 
-        self.scanned_cv = core.warp(self.original_cv, self._corners_to_contour())
+        contour: np.ndarray = self._corners_to_contour()
+        if not core.is_valid_quad(contour, self.original_cv):
+            messagebox.showwarning(
+                "Selective Mode",
+                "The corners do not form a page.\nMove them apart and press SCAN again.",
+            )
+            return
+
+        self.scanned_cv = core.warp(self.original_cv, contour)
         self._apply_adjustments()
         self.status_var.set("Selective: scanned with manual corners.")
 
@@ -703,7 +716,10 @@ class App(tk.Tk):
             self.status_var.set(f"Exported: {os.path.basename(path)}")
             messagebox.showinfo("Exported", f"Saved to:\n{path}")
         else:
-            messagebox.showerror("Error", "Could not save file.")
+            messagebox.showerror(
+                "Error",
+                "Could not save file.\nUse a .png or .jpg name in a folder you can write to.",
+            )
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────

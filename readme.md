@@ -53,7 +53,9 @@ flowchart TD
     found -- No --> fallback["Use the original image"]
 
     mode -- SELECTIVE --> corners["Drag 4 corners, then SCAN"]
-    corners --> warp
+    corners --> valid{"is_valid_quad?"}
+    valid -- Yes --> warp
+    valid -- No --> warning["Show warning"]
 
     warp --> adjust["adjust: apply sliders"]
     adjust --> result["Show result"]
