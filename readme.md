@@ -10,12 +10,17 @@ This project is designed to address the problem of needing to scan documents wit
 
 2. clone this project and install dependencies.
 
-        git clone
+        git clone https://github.com/worapon-st/document-scanner.git
+        cd document-scanner
         uv sync
 
 3. run the program
 
         uv run src/main.py
+
+4. run the tests
+
+        uv run pytest
 
 ## Build the App (Windows)
 
@@ -64,10 +69,4 @@ flowchart TD
 
 ## Example
 
-1. Automation scanned mode.
-
-/img/assets/doc_scanner_auto.png
-
-2. Edge selection scanned mode.
-
-/img/assets/doc_scanner_edge_select.png
+![DocScan with a photo on the left and the flattened page on the right](img/assets/doc_scanner.png)
