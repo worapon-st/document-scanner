@@ -3,10 +3,12 @@ from typing import Optional
 
 import cv2
 import numpy as np
+from PIL import Image
 
 DETECT_SIZE       = 800    # px — long side of the copy used for detection
 MIN_DOCUMENT_AREA = 0.15   # share of the photo a detected page must cover
 MIN_MANUAL_AREA   = 0.01   # share of the photo hand-placed corners must cover
+PDF_LONG_SIDE     = 11.69  # inches — long side of an A4 page
 
 
 # cv2.imread and cv2.imwrite cannot handle non-English paths on Windows, so
@@ -19,8 +21,15 @@ def load_image(path: str) -> Optional[np.ndarray]:
 
 
 def save_image(path: str, image: np.ndarray) -> bool:
+    ext = os.path.splitext(path)[1].lower()
     try:
-        ok, data = cv2.imencode(os.path.splitext(path)[1], image)
+        if ext == ".pdf":
+            rgb = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            rgb.save(path, "PDF", quality=90,
+                     resolution=max(image.shape[:2]) / PDF_LONG_SIDE)
+            return True
+
+        ok, data = cv2.imencode(ext, image)
         if ok:
             data.tofile(path)
         return ok
@@ -94,6 +103,11 @@ def warp(image: np.ndarray, contour: np.ndarray) -> np.ndarray:
     return cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
 
+def rotate(image: np.ndarray, quarter_turns: int) -> np.ndarray:
+    """Return image turned clockwise by 90 degrees per quarter turn."""
+    return np.rot90(image, -quarter_turns).copy()
+
+
 def adjust(
     image: np.ndarray,
     brightness: int = 0,
@@ -108,9 +122,9 @@ def adjust(
     if brightness != 0:
         img = np.clip(img + brightness * 2.55, 0, 255)
 
-    # Contrast: 0…100 — scales pixel values around the midpoint (128).
-    # 0 = no change; 100 ≈ doubles contrast.
-    if contrast > 0:
+    # Contrast: -100…100 — scales pixel values around the midpoint (128).
+    # 0 = no change; 100 ≈ doubles contrast; -100 = flat grey.
+    if contrast != 0:
         factor: float = 1.0 + contrast / 100.0
         img = np.clip((img - 128.0) * factor + 128.0, 0, 255)
 

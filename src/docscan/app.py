@@ -30,6 +30,7 @@ class App(tk.Tk):
         self.original_cv: Optional[np.ndarray] = None
         self.scanned_cv:  Optional[np.ndarray] = None
         self._preview_cv: Optional[np.ndarray] = None   # scanned_cv at display size
+        self._quarter_turns: int               = 0      # clockwise, applied after warp
 
         # Crop corners in original-image pixels, ordered TL, TR, BR, BL
         self._quad:           Optional[np.ndarray] = None
@@ -63,6 +64,7 @@ class App(tk.Tk):
                  font=("Courier New", 9)).pack(side="left", pady=14)
 
         self._topbtn(topbar, "EXPORT", self._export, side="right", padx=(0, 20))
+        self._topbtn(topbar, "ROTATE", self._rotate, side="right")
         self._topbtn(topbar, "IMPORT", self._import, side="right")
 
         # Body
@@ -104,9 +106,9 @@ class App(tk.Tk):
                  font=("Courier New", 8, "bold")).pack(anchor="w", padx=20, pady=(20, 4))
         tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=20, pady=(0, 12))
 
-        # Sliders: brightness (bi-dir), contrast (0–100), saturation (bi-dir), sharpness (0–100)
+        # Sliders: brightness, contrast and saturation (bi-dir), sharpness (0–100)
         self.sl_brightness = self._slider(parent, "BRIGHTNESS", -100, 100,  0)
-        self.sl_contrast   = self._slider(parent, "CONTRAST",      0, 100,  0)
+        self.sl_contrast   = self._slider(parent, "CONTRAST",   -100, 100,  0)
         self.sl_saturation = self._slider(parent, "SATURATION", -100, 100,  0)
         self.sl_sharpness  = self._slider(parent, "SHARPNESS",     0, 100,  0)
 
@@ -361,6 +363,7 @@ class App(tk.Tk):
         self.original_cv = img
         self.scanned_cv  = None
         self._preview_cv = None
+        self._quarter_turns = 0
 
         contour: Optional[np.ndarray] = core.find_document(img)
         self._quad = self._default_quad() if contour is None else core.order_corners(contour)
@@ -383,9 +386,16 @@ class App(tk.Tk):
 
         self._quad = core.order_corners(self._quad)
         self._draw_corners()
-        self.scanned_cv = core.warp(self.original_cv, self._quad)
+        self.scanned_cv = core.rotate(core.warp(self.original_cv, self._quad),
+                                      self._quarter_turns)
         self._update_preview()
         self.status_var.set("Scan updated.")
+
+    def _rotate(self) -> None:
+        if self.scanned_cv is None:
+            return
+        self._quarter_turns = (self._quarter_turns + 1) % 4
+        self._scan()
 
     def _export(self) -> None:
         if self.scanned_cv is None:
@@ -395,7 +405,8 @@ class App(tk.Tk):
         path: str = filedialog.asksaveasfilename(
             title="Save Scanned Image",
             defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("All files", "*.*")],
+            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("PDF", "*.pdf"),
+                       ("All files", "*.*")],
         )
         if not path:
             return
@@ -407,5 +418,6 @@ class App(tk.Tk):
         else:
             messagebox.showerror(
                 "Error",
-                "Could not save file.\nUse a .png or .jpg name in a folder you can write to.",
+                "Could not save file.\n"
+                "Use a .png, .jpg or .pdf name in a folder you can write to.",
             )

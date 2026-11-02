@@ -30,8 +30,9 @@ The app is saved to `dist/DocScan.exe`. It takes a few seconds to open.
 1. Open `DocScan.exe`, or run the program from source.
 2. Press IMPORT and choose a photo of a document. The app finds the page and scans it.
 3. If the crop is wrong, drag the 4 white corners onto the page. The result updates when you let go.
-4. Move the sliders to adjust the result.
-5. Press EXPORT and save as PNG or JPEG.
+4. If the page is sideways, press ROTATE to turn it clockwise.
+5. Move the sliders to adjust the result.
+6. Press EXPORT and save as PNG, JPEG or a one-page PDF.
 
 ## How It Works
 
@@ -54,6 +55,7 @@ flowchart TD
 
     warp --> adjust["adjust: apply sliders"]
     adjust --> result["Show result"]
+    result -- ROTATE --> warp
     result -- Move a slider --> adjust
     result -- Drag a corner --> valid
     keep -- Drag a corner --> valid

@@ -1,4 +1,5 @@
 import math
+import re
 import shutil
 from pathlib import Path
 
@@ -125,6 +126,21 @@ def test_adjust_contrast_moves_pixels_away_from_midpoint() -> None:
     assert core.adjust(image, contrast=100).tolist() == [[[72] * 3, [184] * 3]]
 
 
+def test_adjust_contrast_can_go_down() -> None:
+    image = np.array([[[100, 100, 100], [156, 156, 156]]], np.uint8)
+
+    assert core.adjust(image, contrast=-50).tolist() == [[[114] * 3, [142] * 3]]
+    assert (core.adjust(image, contrast=-100) == 128).all()
+
+
+def test_rotate_turns_clockwise() -> None:
+    image = np.array([[[1, 1, 1], [2, 2, 2]]], np.uint8)
+
+    assert core.rotate(image, 1).tolist() == [[[1] * 3], [[2] * 3]]
+    assert core.rotate(image, 2).tolist() == [[[2] * 3, [1] * 3]]
+    assert np.array_equal(core.rotate(image, 4), image)
+
+
 def test_adjust_saturation_minus_100_removes_colour() -> None:
     image = np.full((4, 4, 3), (30, 90, 200), np.uint8)
 
@@ -182,6 +198,20 @@ def test_load_image_returns_none_for_bad_files(tmp_path: Path) -> None:
     assert core.load_image(str(text)) is None
 
 
-@pytest.mark.parametrize("name", ["scan.pdf", "scan", "missing_folder/scan.png"])
+def test_save_image_writes_a4_sized_pdf(tmp_path: Path) -> None:
+    path = tmp_path / "ใบเสร็จ.pdf"
+
+    assert core.save_image(str(path), np.zeros((1169, 827, 3), np.uint8))
+
+    data = path.read_bytes()
+    assert data.startswith(b"%PDF")
+    width, height = re.search(rb"/MediaBox \[ 0 0 ([\d.]+) ([\d.]+) \]", data).groups()
+    assert float(width) == pytest.approx(595, abs=2)
+    assert float(height) == pytest.approx(842, abs=2)
+
+
+@pytest.mark.parametrize("name", [
+    "scan.xyz", "scan", "missing_folder/scan.png", "missing_folder/scan.pdf",
+])
 def test_save_image_returns_false_on_failure(tmp_path: Path, name: str) -> None:
     assert not core.save_image(str(tmp_path / name), np.zeros((4, 4, 3), np.uint8))
